@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>SplitBrowser – Dynamic Multi-Pane Web Browser</title>
+  <meta name="description" content="SplitBrowser is a Python-based desktop web browser featuring multi-tab support, dynamic 1–4 pane splits, and full-screen for both tabs and individual panes.">
+  <meta name="keywords" content="SplitBrowser, Python, PyQt5, PyQtWebEngine, web browser, multi-tab, split screen, fullscreen pane">
+  <link rel="canonical" href="https://github.com/bocaletto-luca/SplitBrowser">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:title" content="SplitBrowser – Dynamic Multi-Pane Web Browser">
+  <meta property="og:description" content="SplitBrowser is a Python-based desktop web browser featuring multi-tab support, dynamic 1–4 pane splits, and full-screen for both tabs and individual panes.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://github.com/bocaletto-luca/SplitBrowser">
+  <meta property="og:image" content="https://raw.githubusercontent.com/bocaletto-luca/SplitBrowser/main/screenshot.png">
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SplitBrowser – Dynamic Multi-Pane Web Browser">
+  <meta name="twitter:description" content="SplitBrowser is a Python-based desktop web browser featuring multi-tab support, dynamic 1–4 pane splits, and full-screen for both tabs and individual panes.">
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/bocaletto-luca/SplitBrowser/main/screenshot.png">
+  
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; color: #333; }
+    header, footer { background: #f4f4f4; padding: 1em; text-align: center; }
+    main { max-width: 800px; margin: 2em auto; padding: 0 1em; }
+    h1, h2 { color: #00509e; }
+    pre { background: #eef; padding: 1em; overflow-x: auto; }
+    a { color: #00509e; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul { list-style: disc inside; margin: 0.5em 0 1em; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>SplitBrowser</h1>
+    <p>Dynamic Multi-Pane Web Browser Built with Python &amp; PyQt5</p>
+    <p><a href="https://github.com/bocaletto-luca/SplitBrowser" target="_blank">GitHub Repository</a></p>
+  </header>
+
+  <main>
+    <section id="features">
+      <h2>Features</h2>
+      <ul>
+        <li>Multi-tab browsing: open and close tabs easily.</li>
+        <li>Dynamic split layouts: 1, 2, 3 or 4 panes per tab.</li>
+        <li>Equal pane sizing: 50/50, ~33/33/33, 25/25/25/25.</li>
+        <li>Per-pane controls: Back, Forward, Reload, Clear Cache, URL bar.</li>
+        <li>Fullscreen support:
+          <ul>
+            <li>Tab fullscreen (F11 / Esc)</li>
+            <li>Pane fullscreen (Shift+F11 / Esc)</li>
+          </ul>
+        </li>
+        <li>Keyboard navigation:
+          <ul>
+            <li>Ctrl+PgUp / Ctrl+PgDown: switch tabs in tab-fullscreen mode</li>
+            <li>Ctrl+Tab / Ctrl+Shift+Tab: cycle panes in pane-fullscreen mode</li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+
+    <section id="requirements">
+      <h2>Requirements</h2>
+      <ul>
+        <li>Python 3.7 or newer</li>
+        <li>PyQt5</li>
+        <li>PyQtWebEngine</li>
+      </ul>
+    </section>
+
+    <section id="installation">
+      <h2>Installation</h2>
+      <pre><code># clone the repository
+git clone https://github.com/bocaletto-luca/SplitBrowser.git
+cd SplitBrowser
+
+# create & activate virtual environment
+python3 -m venv venv
+source venv/bin/activate        # macOS / Linux
+# .\venv\Scripts\activate.ps1   # Windows PowerShell
+
+# install dependencies
+pip install --upgrade pip
+pip install PyQt5 PyQtWebEngine
+</code></pre>
+    </section>
+
+    <section id="usage">
+      <h2>Usage</h2>
+      <pre><code># inside the venv
+python main.py
+</code></pre>
+      <p>Use the menu or shortcuts to manage tabs, splits, fullscreen, and navigation.</p>
+    </section>
+
+    <section id="shortcuts">
+      <h2>Keyboard Shortcuts</h2>
+      <ul>
+        <li><strong>Ctrl+T</strong>: New Tab</li>
+        <li><strong>Ctrl+W</strong>: Close Tab</li>
+        <li><strong>F11</strong>: Toggle fullscreen for entire window</li>
+        <li><strong>Shift+F11</strong>: Toggle fullscreen for active pane</li>
+        <li><strong>Esc</strong>: Exit fullscreen mode</li>
+        <li><strong>Ctrl+PgUp / Ctrl+PgDown</strong>: Switch tabs (in fullscreen window)</li>
+        <li><strong>Ctrl+Tab / Ctrl+Shift+Tab</strong>: Cycle panes (in fullscreen pane)</li>
+      </ul>
+    </section>
+
+    <section id="contributing">
+      <h2>Contributing</h2>
+      <p>Contributions are welcome! Please fork the project, create a feature branch, commit your changes, and open a pull request.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>MIT License © 2025 Luca Bocaletto</p>
+  </footer>
+</body>
+</html>
