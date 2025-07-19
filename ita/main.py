@@ -1,65 +1,60 @@
 #!/usr/bin/env python3
 import sys
-from PyQt5.QtCore import Qt, pyqtSignal, QUrl
+from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget,
     QVBoxLayout, QHBoxLayout, QSplitter, QLineEdit,
-    QPushButton, QAction, QMenu
+    QPushButton, QAction, QMenu, QShortcut
 )
+from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 
-class CustomWebView(QWebEngineView):
-    viewActivated = pyqtSignal(object)
-
-    def __init__(self, parent_browser):
-        super().__init__()
-        self.parent_browser = parent_browser
-
-    def focusInEvent(self, event):
-        super().focusInEvent(event)
-        # Segnala al MainWindow quale BrowserView ha il focus
-        self.viewActivated.emit(self.parent_browser)
-
-
 class BrowserView(QWidget):
+    """Widget che incapsula QWebEngineView con barra URL."""
     def __init__(self, main_window, initial_url="https://www.google.com"):
         super().__init__()
         self.main_window = main_window
 
-        # URL bar + pulsante Vai
+        # Barra URL + pulsante Vai
         self.url_bar = QLineEdit(initial_url)
-        self.go_button = QPushButton("Vai")
-        self.go_button.clicked.connect(self.load_url)
+        self.go_btn  = QPushButton("Vai")
+        self.go_btn.clicked.connect(self.load_url)
 
-        top_layout = QHBoxLayout()
-        top_layout.setContentsMargins(0, 0, 0, 0)
-        top_layout.addWidget(self.url_bar)
-        top_layout.addWidget(self.go_button)
+        top_h = QHBoxLayout()
+        top_h.setContentsMargins(0, 0, 0, 0)
+        top_h.addWidget(self.url_bar)
+        top_h.addWidget(self.go_btn)
 
-        # WebEngineView custom
-        self.webview = CustomWebView(self)
-        self.webview.viewActivated.connect(main_window.set_current_browser)
-        self.webview.loadFinished.connect(self.update_tab_title)
+        # WebEngineView
+        self.webview = QWebEngineView()
+        self.webview.load(QUrl(initial_url))
+        self.webview.titleChanged.connect(self.update_tab_title)
 
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addLayout(top_layout)
-        main_layout.addWidget(self.webview)
-        self.setLayout(main_layout)
+        # intercetto focus
+        self.webview.installEventFilter(self)
 
-        self.load_url()
+        main_v = QVBoxLayout(self)
+        main_v.setContentsMargins(0, 0, 0, 0)
+        main_v.addLayout(top_h)
+        main_v.addWidget(self.webview)
 
     def load_url(self):
-        url = self.url_bar.text().strip()
-        if not url.startswith(("http://", "https://")):
-            url = "http://" + url
-        self.webview.load(QUrl(url))
+        txt = self.url_bar.text().strip()
+        if not txt.startswith(("http://", "https://")):
+            txt = "http://" + txt
+        self.webview.load(QUrl(txt))
 
     def update_tab_title(self):
-        title = self.webview.title() or "Nuova Scheda"
         idx = self.main_window.tabs.currentIndex()
-        self.main_window.tabs.setTabText(idx, title)
+        title = self.webview.title() or "Nuova Scheda"
+        if idx >= 0:
+            self.main_window.tabs.setTabText(idx, title)
+
+    def eventFilter(self, obj, evt):
+        if obj is self.webview and evt.type() == evt.FocusIn:
+            self.main_window.set_current_browser(self)
+        return super().eventFilter(obj, evt)
 
 
 class MainWindow(QMainWindow):
@@ -67,9 +62,17 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("SplitBrowser")
         self.resize(1200, 800)
-        self.current_browser = None
 
-        # Tab widget principale
+        # stato full-screen pane
+        self.is_pane_fs           = False
+        self.fs_old_central       = None
+        self.fs_old_tab_container = None
+        self.fs_parent            = None
+        self.fs_index             = None
+        self.fs_pane_list         = []
+        self.fs_current_pane      = None
+
+        # QTabWidget principale
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.close_tab)
@@ -78,64 +81,85 @@ class MainWindow(QMainWindow):
 
         self._create_actions()
         self._create_menus()
+        self._create_shortcuts()
 
-        # Apri la prima scheda
         self.add_tab()
 
     def _create_actions(self):
-        self.new_tab_act   = QAction("Nuova scheda", self, triggered=self.add_tab)
-        self.close_tab_act = QAction("Chiudi scheda", self, triggered=self.close_current_tab)
-        self.exit_act      = QAction("Esci", self, triggered=self.close)
+        # File
+        self.new_tab_act   = QAction("Nuova scheda", self, shortcut="Ctrl+T",   triggered=self.add_tab)
+        self.close_tab_act = QAction("Chiudi scheda", self, shortcut="Ctrl+W", triggered=self.close_current_tab)
+        self.exit_act      = QAction("Esci", self, shortcut="Ctrl+Q",           triggered=self.close)
 
-        # Split 2,3,4 parti orizzontali/verticali
-        self.split_actions = []
-        for orient, label in [(Qt.Horizontal, "Orizzontale"), (Qt.Vertical, "Verticale")]:
-            menu = QMenu(f"{label}", self)
-            for parts in (2, 3, 4):
-                act = QAction(f"{parts} parti", self,
-                              triggered=lambda chk, o=orient, p=parts: self.split_current(o, p))
-                menu.addAction(act)
-            self.split_actions.append((label, menu))
+        # Split
+        self.split_reset = QAction("1 parte", self, triggered=lambda: self.split_current(None, 1))
+
+        self.split_h = QMenu("Orizzontale", self)
+        self.split_v = QMenu("Verticale",   self)
+        for i in (2, 3, 4):
+            self.split_h.addAction(QAction(f"{i} parti", self,
+                triggered=lambda _, c=i: self.split_current(Qt.Horizontal, c)))
+            self.split_v.addAction(QAction(f"{i} parti", self,
+                triggered=lambda _, c=i: self.split_current(Qt.Vertical, c)))
+
+        # Fullscreen
+        self.full_tab_act  = QAction("FullScreen Tab",  self,
+                                    shortcut="F11", checkable=True,
+                                    triggered=self.toggle_fullscreen_tab)
+        self.full_pane_act = QAction("FullScreen Pane", self,
+                                    shortcut="Shift+F11", checkable=True,
+                                    triggered=self.toggle_fullscreen_pane)
 
     def _create_menus(self):
-        menubar  = self.menuBar()
-        file_menu = menubar.addMenu("File")
-        file_menu.addAction(self.new_tab_act)
-        file_menu.addAction(self.close_tab_act)
-        file_menu.addSeparator()
-        file_menu.addAction(self.exit_act)
+        mb = self.menuBar()
+        # File
+        fm = mb.addMenu("File")
+        fm.addAction(self.new_tab_act)
+        fm.addAction(self.close_tab_act)
+        fm.addSeparator()
+        fm.addAction(self.exit_act)
+        # Split
+        sm = mb.addMenu("Split")
+        sm.addAction(self.split_reset)
+        sm.addSeparator()
+        sm.addMenu(self.split_h)
+        sm.addMenu(self.split_v)
+        # View
+        vm = mb.addMenu("View")
+        vm.addAction(self.full_tab_act)
+        vm.addAction(self.full_pane_act)
 
-        split_menu = menubar.addMenu("Split")
-        # Aggiunge l'opzione per tornare a singolo pannello
-        reset_act = QAction("1 parte", self, triggered=lambda: self.split_current(None, 1))
-        split_menu.addAction(reset_act)
-        split_menu.addSeparator()
-        # Aggiungi i sotto-menu Orizzontale/Verticale
-        for label, submenu in self.split_actions:
-            split_menu.addMenu(submenu)
+    def _create_shortcuts(self):
+        # switch tab in full-screen tab
+        QShortcut(QKeySequence("Ctrl+PgDown"), self, activated=self.next_tab)
+        QShortcut(QKeySequence("Ctrl+PgUp"),   self, activated=self.prev_tab)
+        # switch pane in full-screen pane
+        QShortcut(QKeySequence("Ctrl+Tab"),    self, activated=lambda: self.switch_pane(1))
+        QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, activated=lambda: self.switch_pane(-1))
+        # Esc per uscire da qualunque full-screen
+        QShortcut(QKeySequence("Escape"), self, activated=self._exit_fullscreen_any)
 
     def add_tab(self):
-        """Aggiunge una nuova scheda con splitter a 1 pannello."""
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
+        cont = QWidget()
+        cont.current_browser = None
+        lay = QVBoxLayout(cont)
+        lay.setContentsMargins(0, 0, 0, 0)
 
-        splitter = QSplitter(Qt.Horizontal)
+        split = QSplitter(Qt.Horizontal)
+        split.setHandleWidth(6)
         browser = BrowserView(self)
-        splitter.addWidget(browser)
+        split.addWidget(browser)
+        lay.addWidget(split)
 
-        layout.addWidget(splitter)
-        self.tabs.addTab(container, "Nuova Scheda")
-        self.tabs.setCurrentWidget(container)
-
-        # Memorizza il browser corrente in questo container
-        container.current_browser = browser
+        cont.current_browser = browser
+        self.tabs.addTab(cont, "Nuova Scheda")
+        self.tabs.setCurrentWidget(cont)
         self.current_browser = browser
 
     def close_current_tab(self):
-        idx = self.tabs.currentIndex()
-        if idx != -1:
-            self.close_tab(idx)
+        i = self.tabs.currentIndex()
+        if i != -1:
+            self.close_tab(i)
 
     def close_tab(self, idx):
         self.tabs.removeTab(idx)
@@ -143,74 +167,143 @@ class MainWindow(QMainWindow):
             self.add_tab()
 
     def on_tab_changed(self, idx):
-        """Quando cambio tab, aggiorno current_browser dal container."""
-        container = self.tabs.widget(idx)
-        if container and hasattr(container, "current_browser"):
-            self.current_browser = container.current_browser
+        cont = self.tabs.widget(idx)
+        if cont:
+            self.current_browser = getattr(cont, "current_browser", None)
 
-    def set_current_browser(self, browser):
-        """Segnalato da CustomWebView quando un mini-browser riceve focus."""
-        self.current_browser = browser
-        # Aggiorna anche il container
+    def set_current_browser(self, pane):
+        self.current_browser = pane
+        # sincronizza il tab corrente
         for i in range(self.tabs.count()):
-            container = self.tabs.widget(i)
-            if getattr(container, "current_browser", None) is browser:
+            c = self.tabs.widget(i)
+            if getattr(c, "current_browser", None) is pane:
                 self.tabs.setCurrentIndex(i)
                 break
 
-    def split_current(self, orientation, count):
-        """
-        Ricostruisce la scheda corrente con ‘count’ pannelli.
-        Per count=1 resetta allo stato iniziale.
-        """
-        container = self.tabs.currentWidget()
-        if not container or not hasattr(container, "current_browser"):
+    def split_current(self, orient, count):
+        cont = self.tabs.currentWidget()
+        if not cont or not self.current_browser:
             return
+        old = cont.current_browser
+        old_url = old.webview.url().toString()
 
-        old_browser = container.current_browser
-        # Prende l'URL dell'istanza attiva per riutilizzarla
-        old_url = old_browser.webview.url().toString()
-
-        # Svuota completamente il layout precedente
-        layout = container.layout()
-        while layout.count():
-            item = layout.takeAt(0)
-            w = item.widget()
+        # pulisco il layout
+        lay = cont.layout()
+        while lay.count():
+            itm = lay.takeAt(0)
+            w = itm.widget()
             if w:
                 w.setParent(None)
                 w.deleteLater()
 
-        # Se reset a 1 pannello
+        # 1 parte = reset
         if count == 1:
-            splitter = QSplitter(Qt.Horizontal)
-            new_browser = BrowserView(self, old_url)
-            splitter.addWidget(new_browser)
-
-            layout.addWidget(splitter)
-            container.current_browser = new_browser
-            self.current_browser = new_browser
+            split = QSplitter(Qt.Horizontal); split.setHandleWidth(6)
+            nb = BrowserView(self, old_url)
+            split.addWidget(nb)
+            lay.addWidget(split)
+            cont.current_browser = nb
+            self.current_browser   = nb
             return
 
-        # Altrimenti crea nuovo splitter con 'count' pannelli
-        splitter = QSplitter(orientation)
-        # Primo pannello col vecchio URL
+        # nuovo splitter orientato
+        split = QSplitter(orient); split.setHandleWidth(6)
         first = BrowserView(self, old_url)
-        splitter.addWidget(first)
-        # Gli altri pannelli (URL di default)
+        split.addWidget(first)
         for _ in range(count - 1):
-            splitter.addWidget(BrowserView(self))
+            split.addWidget(BrowserView(self))
+        split.setSizes([1] * count)
+        lay.addWidget(split)
 
-        # Imposta dimensioni proporzionali uguali
-        splitter.setSizes([1] * count)
-
-        layout.addWidget(splitter)
-        # Memorizza il primo come current
-        container.current_browser = first
+        cont.current_browser = first
         self.current_browser = first
+
+    def toggle_fullscreen_tab(self):
+        if self.full_tab_act.isChecked():
+            self.showFullScreen()
+        else:
+            self.showNormal()
+
+    def toggle_fullscreen_pane(self):
+        if self.is_pane_fs:
+            # esci da full-pane
+            pane = self.fs_current_pane
+            self.setCentralWidget(self.fs_old_central)
+            self.menuBar().setVisible(True)
+            self.fs_parent.insertWidget(self.fs_index, pane)
+            self.is_pane_fs = False
+            self.full_pane_act.setChecked(False)
+        else:
+            # entra in full-pane
+            pane = self.current_browser
+            parent = pane.parent(); idx = parent.indexOf(pane)
+
+            self.fs_old_central       = self.centralWidget()
+            self.fs_old_tab_container = self.tabs.currentWidget()
+            self.fs_parent            = parent
+            self.fs_index             = idx
+            self.fs_current_pane      = pane
+
+            pane.setParent(None)
+            self.menuBar().setVisible(False)
+            self.setCentralWidget(pane)
+            self.is_pane_fs = True
+            self.full_pane_act.setChecked(True)
+
+            # elenco dei pane nella tab originale
+            self.fs_pane_list = self._collect_panes(self.fs_old_tab_container)
+
+    def _collect_panes(self, container):
+        panes = []
+        def recurse(w):
+            if isinstance(w, BrowserView):
+                panes.append(w)
+            elif isinstance(w, QSplitter):
+                for i in range(w.count()):
+                    recurse(w.widget(i))
+        lay = container.layout()
+        if not lay or lay.count() == 0:
+            return panes
+        recurse(lay.itemAt(0).widget())
+        return panes
+
+    def switch_pane(self, step):
+        if not self.is_pane_fs: return
+        lst = self.fs_pane_list; cur = self.fs_current_pane
+        if cur not in lst: return
+        nxt = lst[(lst.index(cur) + step) % len(lst)]
+        # esco e rientro sul nuovo
+        self.toggle_fullscreen_pane()
+        self.current_browser = nxt
+        self.toggle_fullscreen_pane()
+
+    def next_tab(self):
+        i = (self.tabs.currentIndex() + 1) % self.tabs.count()
+        self.tabs.setCurrentIndex(i)
+
+    def prev_tab(self):
+        i = (self.tabs.currentIndex() - 1) % self.tabs.count()
+        self.tabs.setCurrentIndex(i)
+
+    def _exit_fullscreen_any(self):
+        # Esc esce da entrambe le modalità
+        if self.is_pane_fs:
+            self.toggle_fullscreen_pane()
+        elif self.full_tab_act.isChecked():
+            self.full_tab_act.setChecked(False)
+            self.toggle_fullscreen_tab()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
+    app.setStyle("Fusion")
+    app.setStyleSheet("""
+      QSplitter::handle {
+        background-color: #5c85d6;
+      }
+      QSplitter::handle:horizontal { width: 6px; }
+      QSplitter::handle:vertical   { height: 6px; }
+    """)
+    win = MainWindow()
+    win.show()
     sys.exit(app.exec_())
