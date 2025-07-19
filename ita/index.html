@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>SplitBrowser – Browser Web Desktop Multi-Pannello</title>
+  <meta name="description"
+        content="SplitBrowser è un browser desktop Python con multi-scheda, split dinamico da 1 a 4 riquadri e fullscreen su scheda e singolo riquadro.">
+  <meta name="keywords"
+        content="SplitBrowser, Python, PyQt5, PyQtWebEngine, browser desktop, multi-scheda, split-screen, fullscreen riquadro">
+  <link rel="canonical" href="https://github.com/bocaletto-luca/SplitBrowser">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:title" content="SplitBrowser – Browser Web Desktop Multi-Pannello">
+  <meta property="og:description"
+        content="SplitBrowser è un browser desktop Python con multi-scheda, split dinamico da 1 a 4 riquadri e fullscreen su scheda e singolo riquadro.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://github.com/bocaletto-luca/SplitBrowser">
+  <meta property="og:image"
+        content="https://raw.githubusercontent.com/bocaletto-luca/SplitBrowser/main/screenshot.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SplitBrowser – Browser Web Desktop Multi-Pannello">
+  <meta name="twitter:description"
+        content="SplitBrowser è un browser desktop Python con multi-scheda, split dinamico da 1 a 4 riquadri e fullscreen su scheda e singolo riquadro.">
+  <meta name="twitter:image"
+        content="https://raw.githubusercontent.com/bocaletto-luca/SplitBrowser/main/screenshot.png">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    header, footer {
+      background: #f4f4f4;
+      padding: 1em;
+      text-align: center;
+    }
+    main {
+      max-width: 800px;
+      margin: 2em auto;
+      padding: 0 1em;
+    }
+    h1, h2 {
+      color: #00509e;
+    }
+    pre {
+      background: #eef;
+      padding: 1em;
+      overflow-x: auto;
+    }
+    a {
+      color: #00509e;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul {
+      list-style: disc inside;
+      margin: 0.5em 0 1em;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>SplitBrowser</h1>
+    <p>Browser Web Desktop Multi-Pannello realizzato in Python e PyQt5</p>
+    <p><a href="https://github.com/bocaletto-luca/SplitBrowser" target="_blank">Vai al repository GitHub</a></p>
+  </header>
+
+  <main>
+    <section id="features">
+      <h2>Caratteristiche</h2>
+      <ul>
+        <li>Multi-scheda: apri e chiudi schede con facilità.</li>
+        <li>Split dinamico: 1, 2, 3 o 4 riquadri per ogni scheda.</li>
+        <li>Ridimensionamento uniforme:
+          <ul>
+            <li>2 riquadri → 50% / 50%</li>
+            <li>3 riquadri → ~33% ciascuno</li>
+            <li>4 riquadri → 25% ciascuno</li>
+          </ul>
+        </li>
+        <li>Controlli per ogni riquadro:
+          <ul>
+            <li>Barra URL + pulsante Go</li>
+            <li>◀ Indietro, ▶ Avanti, ⟳ Ricarica, 🗑 Pulisci cache</li>
+          </ul>
+        </li>
+        <li>Modalità full-screen:
+          <ul>
+            <li>F11 / Esc: intera finestra (scheda)</li>
+            <li>Shift+F11 / Esc: riquadro attivo</li>
+          </ul>
+        </li>
+        <li>Scorciatoie:
+          <ul>
+            <li>Ctrl+PgUp / Ctrl+PgDown: cambia scheda (in fullscreen scheda)</li>
+            <li>Ctrl+Tab / Ctrl+Shift+Tab: cicla riquadri (in fullscreen riquadro)</li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+
+    <section id="requirements">
+      <h2>Requisiti</h2>
+      <ul>
+        <li>Python 3.7 o superiore</li>
+        <li>PyQt5</li>
+        <li>PyQtWebEngine</li>
+      </ul>
+    </section>
+
+    <section id="installation">
+      <h2>Installazione</h2>
+      <pre><code># Clona il repository
+git clone https://github.com/bocaletto-luca/SplitBrowser.git
+cd SplitBrowser
+
+# Crea e attiva il virtual environment
+python3 -m venv venv
+source venv/bin/activate        # macOS / Linux
+# .\venv\Scripts\activate.ps1   # Windows PowerShell
+
+# Installa le dipendenze
+pip install --upgrade pip
+pip install PyQt5 PyQtWebEngine
+</code></pre>
+    </section>
+
+    <section id="usage">
+      <h2>Uso</h2>
+      <pre><code># Avvia l'app all'interno del venv
+python main.py
+</code></pre>
+      <p>Usa il menu o le scorciatoie per gestire schede, split, fullscreen e navigazione.</p>
+    </section>
+
+    <section id="shortcuts">
+      <h2>Scorciatoie da tastiera</h2>
+      <ul>
+        <li><strong>Ctrl+T</strong>: Nuova scheda</li>
+        <li><strong>Ctrl+W</strong>: Chiudi scheda</li>
+        <li><strong>F11</strong>: Fullscreen intera finestra</li>
+        <li><strong>Shift+F11</strong>: Fullscreen riquadro attivo</li>
+        <li><strong>Esc</strong>: Esci da fullscreen</li>
+        <li><strong>Ctrl+PgUp / Ctrl+PgDown</strong>: Cambia scheda (in fullscreen scheda)</li>
+        <li><strong>Ctrl+Tab / Ctrl+Shift+Tab</strong>: Cicla riquadri (in fullscreen riquadro)</li>
+      </ul>
+    </section>
+
+    <section id="contributing">
+      <h2>Contribuire</h2>
+      <p>Contributi benvenuti! Fai fork, crea un branch, applica le modifiche e apri una pull request.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>MIT License © 2025 Luca Bocaletto</p>
+  </footer>
+</body>
+</html>
