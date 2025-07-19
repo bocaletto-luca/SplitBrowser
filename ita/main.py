@@ -2,58 +2,68 @@
 import sys
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QTabWidget, QWidget,
-    QVBoxLayout, QHBoxLayout, QSplitter, QLineEdit,
-    QPushButton, QAction, QMenu, QShortcut
+    QApplication, QMainWindow, QAction, QMenu, QHBoxLayout, QVBoxLayout,
+    QSplitter, QLineEdit, QPushButton, QWidget, QTabWidget, QShortcut
 )
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
 
 class BrowserView(QWidget):
-    """Widget che incapsula QWebEngineView con barra URL."""
-    def __init__(self, main_window, initial_url="https://www.google.com"):
+    def __init__(self, main, url="https://www.google.com"):
         super().__init__()
-        self.main_window = main_window
+        self.main = main
 
-        # Barra URL + pulsante Vai
-        self.url_bar = QLineEdit(initial_url)
-        self.go_btn  = QPushButton("Vai")
+        # Barra URL + Pulsanti
+        self.url_bar = QLineEdit(url)
+        self.back_btn    = QPushButton("◀")
+        self.forward_btn = QPushButton("▶")
+        self.reload_btn  = QPushButton("⟳")
+        self.cache_btn   = QPushButton("🗑")
+        self.go_btn      = QPushButton("Vai")
+
+        self.back_btn.clicked.connect(lambda: self.web.back())
+        self.forward_btn.clicked.connect(lambda: self.web.forward())
+        self.reload_btn.clicked.connect(lambda: self.web.reload())
+        self.cache_btn.clicked.connect(self.clear_cache)
         self.go_btn.clicked.connect(self.load_url)
 
-        top_h = QHBoxLayout()
-        top_h.setContentsMargins(0, 0, 0, 0)
-        top_h.addWidget(self.url_bar)
-        top_h.addWidget(self.go_btn)
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        for w in (self.back_btn, self.forward_btn,
+                  self.reload_btn, self.cache_btn,
+                  self.url_bar, self.go_btn):
+            top.addWidget(w)
 
         # WebEngineView
-        self.webview = QWebEngineView()
-        self.webview.load(QUrl(initial_url))
-        self.webview.titleChanged.connect(self.update_tab_title)
+        self.web = QWebEngineView()
+        self.web.load(QUrl(url))
+        self.web.titleChanged.connect(self.update_tab_title)
+        self.web.installEventFilter(self)
 
-        # intercetto focus
-        self.webview.installEventFilter(self)
-
-        main_v = QVBoxLayout(self)
-        main_v.setContentsMargins(0, 0, 0, 0)
-        main_v.addLayout(top_h)
-        main_v.addWidget(self.webview)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(top)
+        layout.addWidget(self.web)
 
     def load_url(self):
         txt = self.url_bar.text().strip()
         if not txt.startswith(("http://", "https://")):
             txt = "http://" + txt
-        self.webview.load(QUrl(txt))
+        self.web.load(QUrl(txt))
 
     def update_tab_title(self):
-        idx = self.main_window.tabs.currentIndex()
-        title = self.webview.title() or "Nuova Scheda"
+        idx = self.main.tabs.currentIndex()
         if idx >= 0:
-            self.main_window.tabs.setTabText(idx, title)
+            title = self.web.title() or "Nuova Scheda"
+            self.main.tabs.setTabText(idx, title)
+
+    def clear_cache(self):
+        prof = QWebEngineProfile.defaultProfile()
+        prof.clearHttpCache()
 
     def eventFilter(self, obj, evt):
-        if obj is self.webview and evt.type() == evt.FocusIn:
-            self.main_window.set_current_browser(self)
+        if obj is self.web and evt.type() == evt.FocusIn:
+            self.main.set_current(self)
         return super().eventFilter(obj, evt)
 
 
@@ -63,14 +73,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("SplitBrowser")
         self.resize(1200, 800)
 
-        # stato full-screen pane
-        self.is_pane_fs           = False
-        self.fs_old_central       = None
-        self.fs_old_tab_container = None
-        self.fs_parent            = None
-        self.fs_index             = None
-        self.fs_pane_list         = []
-        self.fs_current_pane      = None
+        # stato full-tab
+        self.act_fullTab = None
 
         # QTabWidget principale
         self.tabs = QTabWidget()
@@ -82,84 +86,97 @@ class MainWindow(QMainWindow):
         self._create_actions()
         self._create_menus()
         self._create_shortcuts()
-
         self.add_tab()
 
     def _create_actions(self):
         # File
-        self.new_tab_act   = QAction("Nuova scheda", self, shortcut="Ctrl+T",   triggered=self.add_tab)
-        self.close_tab_act = QAction("Chiudi scheda", self, shortcut="Ctrl+W", triggered=self.close_current_tab)
-        self.exit_act      = QAction("Esci", self, shortcut="Ctrl+Q",           triggered=self.close)
+        self.act_new_tab   = QAction("Nuova scheda", self, shortcut="Ctrl+T")
+        self.act_close_tab = QAction("Chiudi scheda", self, shortcut="Ctrl+W")
+        self.act_exit      = QAction("Esci", self, shortcut="Ctrl+Q")
 
         # Split
-        self.split_reset = QAction("1 parte", self, triggered=lambda: self.split_current(None, 1))
+        self.act_split1 = QAction("1 parte", self)
+        self.act_split1.triggered.connect(lambda: self.split_current(None, 1))
 
-        self.split_h = QMenu("Orizzontale", self)
-        self.split_v = QMenu("Verticale",   self)
-        for i in (2, 3, 4):
-            self.split_h.addAction(QAction(f"{i} parti", self,
-                triggered=lambda _, c=i: self.split_current(Qt.Horizontal, c)))
-            self.split_v.addAction(QAction(f"{i} parti", self,
-                triggered=lambda _, c=i: self.split_current(Qt.Vertical, c)))
-
-        # Fullscreen
-        self.full_tab_act  = QAction("FullScreen Tab",  self,
-                                    shortcut="F11", checkable=True,
-                                    triggered=self.toggle_fullscreen_tab)
-        self.full_pane_act = QAction("FullScreen Pane", self,
-                                    shortcut="Shift+F11", checkable=True,
-                                    triggered=self.toggle_fullscreen_pane)
+        # Full-screen
+        self.act_fullPane = QAction("FullScreen Pane", self, shortcut="Shift+F11", checkable=True)
+        # la tab full-screen la colleghiamo dopo aver creato il menu per
+        # poter memorizzare l’azione in self.act_fullTab
 
     def _create_menus(self):
         mb = self.menuBar()
-        # File
+
+        # File menu
         fm = mb.addMenu("File")
-        fm.addAction(self.new_tab_act)
-        fm.addAction(self.close_tab_act)
+        fm.addAction(self.act_new_tab)
+        fm.addAction(self.act_close_tab)
         fm.addSeparator()
-        fm.addAction(self.exit_act)
-        # Split
+        fm.addAction(self.act_exit)
+        self.act_new_tab.triggered.connect(self.add_tab)
+        self.act_close_tab.triggered.connect(self.close_current_tab)
+        self.act_exit.triggered.connect(self.close)
+
+        # Split menu
         sm = mb.addMenu("Split")
-        sm.addAction(self.split_reset)
+        sm.addAction(self.act_split1)
         sm.addSeparator()
-        sm.addMenu(self.split_h)
-        sm.addMenu(self.split_v)
-        # View
+
+        hmenu = sm.addMenu("Orizzontale")
+        for n in (2, 3, 4):
+            a = QAction(f"{n} parti", self)
+            a.triggered.connect(lambda _, n=n: self.split_current(Qt.Horizontal, n))
+            hmenu.addAction(a)
+
+        vmenu = sm.addMenu("Verticale")
+        for n in (2, 3, 4):
+            a = QAction(f"{n} parti", self)
+            a.triggered.connect(lambda _, n=n: self.split_current(Qt.Vertical, n))
+            vmenu.addAction(a)
+
+        # View menu
         vm = mb.addMenu("View")
-        vm.addAction(self.full_tab_act)
-        vm.addAction(self.full_pane_act)
+        # FullScreen Tab
+        self.act_fullTab = QAction("FullScreen Tab", self, shortcut="F11", checkable=True)
+        self.act_fullTab.triggered.connect(self.toggle_full_tab)
+        vm.addAction(self.act_fullTab)
+        # FullScreen Pane
+        vm.addAction(self.act_fullPane)
 
     def _create_shortcuts(self):
-        # switch tab in full-screen tab
+        # switch schede
         QShortcut(QKeySequence("Ctrl+PgDown"), self, activated=self.next_tab)
         QShortcut(QKeySequence("Ctrl+PgUp"),   self, activated=self.prev_tab)
-        # switch pane in full-screen pane
-        QShortcut(QKeySequence("Ctrl+Tab"),    self, activated=lambda: self.switch_pane(1))
+        # switch pane in full-pane
+        QShortcut(QKeySequence("Ctrl+Tab"),       self, activated=lambda: self.switch_pane(1))
         QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, activated=lambda: self.switch_pane(-1))
-        # Esc per uscire da qualunque full-screen
-        QShortcut(QKeySequence("Escape"), self, activated=self._exit_fullscreen_any)
+        # Esc esce da qualunque full-screen
+        QShortcut(QKeySequence("Escape"), self, activated=self.exit_fullscreen)
 
     def add_tab(self):
         cont = QWidget()
-        cont.current_browser = None
+        cont.prev_sizes = None
+        cont.isPaneFS   = False
+
         lay = QVBoxLayout(cont)
         lay.setContentsMargins(0, 0, 0, 0)
 
-        split = QSplitter(Qt.Horizontal)
-        split.setHandleWidth(6)
-        browser = BrowserView(self)
-        split.addWidget(browser)
-        lay.addWidget(split)
+        sp = QSplitter(Qt.Horizontal)
+        sp.setHandleWidth(6)
+        bv = BrowserView(self)
+        sp.addWidget(bv)
+        lay.addWidget(sp)
 
-        cont.current_browser = browser
+        cont.splitter = sp
+        cont.current  = bv
+
         self.tabs.addTab(cont, "Nuova Scheda")
         self.tabs.setCurrentWidget(cont)
-        self.current_browser = browser
+        self.set_current(bv)
 
     def close_current_tab(self):
-        i = self.tabs.currentIndex()
-        if i != -1:
-            self.close_tab(i)
+        idx = self.tabs.currentIndex()
+        if idx >= 0:
+            self.close_tab(idx)
 
     def close_tab(self, idx):
         self.tabs.removeTab(idx)
@@ -169,113 +186,100 @@ class MainWindow(QMainWindow):
     def on_tab_changed(self, idx):
         cont = self.tabs.widget(idx)
         if cont:
-            self.current_browser = getattr(cont, "current_browser", None)
+            self.set_current(cont.current)
 
-    def set_current_browser(self, pane):
-        self.current_browser = pane
-        # sincronizza il tab corrente
+    def set_current(self, bv):
+        self.current = bv
+        # sincronizza tab attiva
         for i in range(self.tabs.count()):
-            c = self.tabs.widget(i)
-            if getattr(c, "current_browser", None) is pane:
+            w = self.tabs.widget(i)
+            if getattr(w, "current", None) is bv:
                 self.tabs.setCurrentIndex(i)
                 break
 
     def split_current(self, orient, count):
         cont = self.tabs.currentWidget()
-        if not cont or not self.current_browser:
+        if not cont or not hasattr(cont, "current"):
             return
-        old = cont.current_browser
-        old_url = old.webview.url().toString()
 
-        # pulisco il layout
+        old = cont.current
+        url = old.web.url().toString()
+
         lay = cont.layout()
+        # svuota
         while lay.count():
-            itm = lay.takeAt(0)
-            w = itm.widget()
+            w = lay.takeAt(0).widget()
             if w:
-                w.setParent(None)
                 w.deleteLater()
 
-        # 1 parte = reset
-        if count == 1:
-            split = QSplitter(Qt.Horizontal); split.setHandleWidth(6)
-            nb = BrowserView(self, old_url)
-            split.addWidget(nb)
-            lay.addWidget(split)
-            cont.current_browser = nb
-            self.current_browser   = nb
-            return
+        # ricrea splitter
+        sp = QSplitter(orient if count > 1 else Qt.Horizontal)
+        sp.setHandleWidth(6)
 
-        # nuovo splitter orientato
-        split = QSplitter(orient); split.setHandleWidth(6)
-        first = BrowserView(self, old_url)
-        split.addWidget(first)
+        first = BrowserView(self, url)
+        sp.addWidget(first)
         for _ in range(count - 1):
-            split.addWidget(BrowserView(self))
-        split.setSizes([1] * count)
-        lay.addWidget(split)
+            sp.addWidget(BrowserView(self))
 
-        cont.current_browser = first
-        self.current_browser = first
+        # percentuali corrette
+        sizes = [1] * count
+        sp.setSizes(sizes)
 
-    def toggle_fullscreen_tab(self):
-        if self.full_tab_act.isChecked():
+        lay.addWidget(sp)
+        cont.splitter = sp
+        cont.current  = first
+        cont.prev_sizes = None
+        cont.isPaneFS   = False
+        self.set_current(first)
+
+    def toggle_full_tab(self, checked):
+        if checked:
             self.showFullScreen()
         else:
             self.showNormal()
 
-    def toggle_fullscreen_pane(self):
-        if self.is_pane_fs:
-            # esci da full-pane
-            pane = self.fs_current_pane
-            self.setCentralWidget(self.fs_old_central)
-            self.menuBar().setVisible(True)
-            self.fs_parent.insertWidget(self.fs_index, pane)
-            self.is_pane_fs = False
-            self.full_pane_act.setChecked(False)
+    def toggle_full_pane(self):
+        cont = self.tabs.currentWidget()
+        if not cont:
+            return
+
+        sp  = cont.splitter
+        idx = sp.indexOf(self.current)
+        n   = sp.count()
+
+        if not cont.isPaneFS:
+            # entra full-pane: salva dimensioni e isola corrente
+            cont.prev_sizes = sp.sizes()
+            total = sum(cont.prev_sizes)
+            new_sizes = [0] * n
+            new_sizes[idx] = total
+            sp.setSizes(new_sizes)
+            cont.isPaneFS = True
+            self.act_fullPane.setChecked(True)
         else:
-            # entra in full-pane
-            pane = self.current_browser
-            parent = pane.parent(); idx = parent.indexOf(pane)
-
-            self.fs_old_central       = self.centralWidget()
-            self.fs_old_tab_container = self.tabs.currentWidget()
-            self.fs_parent            = parent
-            self.fs_index             = idx
-            self.fs_current_pane      = pane
-
-            pane.setParent(None)
-            self.menuBar().setVisible(False)
-            self.setCentralWidget(pane)
-            self.is_pane_fs = True
-            self.full_pane_act.setChecked(True)
-
-            # elenco dei pane nella tab originale
-            self.fs_pane_list = self._collect_panes(self.fs_old_tab_container)
-
-    def _collect_panes(self, container):
-        panes = []
-        def recurse(w):
-            if isinstance(w, BrowserView):
-                panes.append(w)
-            elif isinstance(w, QSplitter):
-                for i in range(w.count()):
-                    recurse(w.widget(i))
-        lay = container.layout()
-        if not lay or lay.count() == 0:
-            return panes
-        recurse(lay.itemAt(0).widget())
-        return panes
+            # esci full-pane: ripristina
+            if cont.prev_sizes:
+                sp.setSizes(cont.prev_sizes)
+            cont.isPaneFS = False
+            self.act_fullPane.setChecked(False)
 
     def switch_pane(self, step):
-        if not self.is_pane_fs: return
-        lst = self.fs_pane_list; cur = self.fs_current_pane
-        if cur not in lst: return
-        nxt = lst[(lst.index(cur) + step) % len(lst)]
-        # esco e rientro sul nuovo
-        self.toggle_fullscreen_pane()
-        self.current_browser = nxt
-        self.toggle_fullscreen_pane()
+        cont = self.tabs.currentWidget()
+        if not cont or not cont.isPaneFS:
+            return
+
+        sp = cont.splitter
+        panes = [sp.widget(i) for i in range(sp.count())]
+        if self.current not in panes:
+            return
+
+        # toggle off current
+        self.toggle_full_pane()
+        idx = panes.index(self.current)
+        nxt = panes[(idx + step) % len(panes)]
+        self.set_current(nxt)
+        # toggle on new
+        self.toggle_full_pane()
 
     def next_tab(self):
         i = (self.tabs.currentIndex() + 1) % self.tabs.count()
@@ -285,24 +289,21 @@ class MainWindow(QMainWindow):
         i = (self.tabs.currentIndex() - 1) % self.tabs.count()
         self.tabs.setCurrentIndex(i)
 
-    def _exit_fullscreen_any(self):
-        # Esc esce da entrambe le modalità
-        if self.is_pane_fs:
-            self.toggle_fullscreen_pane()
-        elif self.full_tab_act.isChecked():
-            self.full_tab_act.setChecked(False)
-            self.toggle_fullscreen_tab()
-
+    def exit_fullscreen(self):
+        cont = self.tabs.currentWidget()
+        if cont and cont.isPaneFS:
+            self.toggle_full_pane()
+        elif self.act_fullTab.isChecked():
+            self.act_fullTab.trigger()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet("""
-      QSplitter::handle {
-        background-color: #5c85d6;
-      }
+      QSplitter::handle { background-color: #5c85d6; }
       QSplitter::handle:horizontal { width: 6px; }
       QSplitter::handle:vertical   { height: 6px; }
+      QPushButton { min-width: 24px; }
     """)
     win = MainWindow()
     win.show()
